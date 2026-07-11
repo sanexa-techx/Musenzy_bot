@@ -1,0 +1,59 @@
+{
+  "start": {
+    "file": "bot/handlers/general.py",
+    "code": "@bot.on_message(filters.command(\"start\") & filters.private)\nasync def start_cmd(client: Client, message: Message):\n    me = await client.get_me()\n    text = (\n        f\"👋 Hi {message.from_user.first_name}!\\n\\n\"\n        \"I play music in Telegram group voice chats.\\n\\n\"\n        \"Add me to a group, start the group's voice chat, then use \"\n        \"/play <song name> in that group.\"\n    )\n    buttons = InlineKeyboardMarkup(\n        [\n            [\n                InlineKeyboardButton(\n                    \"➕ Add me to a group\",\n                    url=f\"https://t.me/{me.username}?startgroup=true\",\n                )\n            ],\n            [InlineKeyboardButton(\"📖 Commands\", callback_data=\"show_help\")],\n        ]\n    )\n    await message.reply_text(text, reply_markup=buttons)"
+  },
+  "help": {
+    "file": "bot/handlers/general.py",
+    "code": "@bot.on_message(filters.command(\"help\"))\nasync def help_cmd(client: Client, message: Message):\n    await message.reply_text(_help_text())"
+  },
+  "play": {
+    "file": "bot/handlers/music.py",
+    "code": "@bot.on_message(filters.command(\"play\") & filters.group)\nasync def play_cmd(client: Client, message: Message):\n    if len(message.command) < 2:\n        await message.reply_text(\"Usage: /play <song name or YouTube URL>\")\n        return\n\n    query = message.text.split(None, 1)[1]\n    status = await message.reply_text(f\"🔎 Searching: {query}\")\n\n    try:\n        info = await resolve_track(query)\n    except Exception as e:\n        await status.edit_text(f\"❌ Couldn't find that track: {e}\")\n        return\n\n    track = Track(\n        title=info[\"title\"],\n        url=info[\"webpage_url\"],\n        stream_url=info[\"stream_url\"],\n        duration=info[\"duration\"],\n        requested_by=message.from_user.mention if message.from_user else \"someone\",\n    )\n\n    chat_id = message.chat.id\n    currently_playing = queue_manager.now_playing(chat_id)\n\n    if currently_playing is None:\n        queue_manager.set_now_playing(chat_id, track)\n        try:\n            await calls.play(chat_id, MediaStream(track.stream_url))\n        except NoActiveGroupCall:\n            await status.edit_text(\n                \"❌ No active voice chat found. Start the group voice chat first.\"\n            )\n            queue_manager.set_now_playing(chat_id, None)\n            return\n        await status.edit_text(\n            f\"▶️ Now playing: **{track.title}**\",\n            reply_markup=_controls_keyboard(paused=False),\n        )\n    else:\n        queue_manager.add(chat_id, track)\n        position = len(queue_manager.get_queue(chat_id))\n        await status.edit_text(f\"✅ Queued at position {position}: **{track.title}**\")"
+  },
+  "play_private_chat_notice": {
+    "file": "bot/handlers/general.py",
+    "code": "@bot.on_message(filters.command(\"play\") & filters.private)\nasync def play_in_private(client: Client, message: Message):\n    await message.reply_text(\n        \"🎵 Music only plays in group voice chats.\\n\"\n        \"Add me to a group and use /play there.\"\n    )"
+  },
+  "pause": {
+    "file": "bot/handlers/music.py",
+    "code": "@bot.on_message(filters.command(\"pause\") & filters.group)\nasync def pause_cmd(client: Client, message: Message):\n    chat_id = message.chat.id\n    await calls.pause(chat_id)\n    queue_manager.set_paused(chat_id, True)\n    await message.reply_text(\"⏸ Paused.\")"
+  },
+  "resume": {
+    "file": "bot/handlers/music.py",
+    "code": "@bot.on_message(filters.command(\"resume\") & filters.group)\nasync def resume_cmd(client: Client, message: Message):\n    chat_id = message.chat.id\n    await calls.resume(chat_id)\n    queue_manager.set_paused(chat_id, False)\n    await message.reply_text(\"▶️ Resumed.\")"
+  },
+  "skip": {
+    "file": "bot/handlers/music.py",
+    "code": "@bot.on_message(filters.command(\"skip\") & filters.group)\nasync def skip_cmd(client: Client, message: Message):\n    chat_id = message.chat.id\n    if queue_manager.now_playing(chat_id) is None:\n        await message.reply_text(\"Nothing is playing right now.\")\n        return\n    await message.reply_text(\"⏭ Skipped.\")\n    await _play_next(chat_id)"
+  },
+  "stop": {
+    "file": "bot/handlers/music.py",
+    "code": "@bot.on_message(filters.command(\"stop\") & filters.group)\nasync def stop_cmd(client: Client, message: Message):\n    chat_id = message.chat.id\n    queue_manager.clear(chat_id)\n    try:\n        await calls.leave_call(chat_id)\n    except Exception:\n        pass\n    await message.reply_text(\"⏹ Stopped and cleared the queue.\")"
+  },
+  "queue": {
+    "file": "bot/handlers/music.py",
+    "code": "@bot.on_message(filters.command(\"queue\") & filters.group)\nasync def queue_cmd(client: Client, message: Message):\n    chat_id = message.chat.id\n    current = queue_manager.now_playing(chat_id)\n    upcoming = list(queue_manager.get_queue(chat_id))\n\n    if not current:\n        await message.reply_text(\"Queue is empty.\")\n        return\n\n    lines = [f\"🎵 **Now playing:** {current.title}\"]\n    if upcoming:\n        lines.append(\"\\n**Up next:**\")\n        for i, t in enumerate(upcoming, 1):\n            lines.append(f\"{i}. {t.title}\")\n    await message.reply_text(\"\\n\".join(lines))"
+  },
+  "inline_button_pause_resume": {
+    "file": "bot/handlers/music.py",
+    "code": "@bot.on_callback_query(filters.regex(\"^ctl_pause_resume$\"))\nasync def ctl_pause_resume(client: Client, callback: CallbackQuery):\n    chat_id = callback.message.chat.id\n    if queue_manager.now_playing(chat_id) is None:\n        await callback.answer(\"Nothing is playing.\", show_alert=True)\n        return\n\n    paused = queue_manager.is_paused(chat_id)\n    if paused:\n        await calls.resume(chat_id)\n        queue_manager.set_paused(chat_id, False)\n        await callback.answer(\"Resumed\")\n    else:\n        await calls.pause(chat_id)\n        queue_manager.set_paused(chat_id, True)\n        await callback.answer(\"Paused\")\n\n    await callback.message.edit_reply_markup(\n        _controls_keyboard(paused=not paused)\n    )"
+  },
+  "inline_button_skip": {
+    "file": "bot/handlers/music.py",
+    "code": "@bot.on_callback_query(filters.regex(\"^ctl_skip$\"))\nasync def ctl_skip(client: Client, callback: CallbackQuery):\n    chat_id = callback.message.chat.id\n    if queue_manager.now_playing(chat_id) is None:\n        await callback.answer(\"Nothing is playing.\", show_alert=True)\n        return\n    await callback.answer(\"Skipped\")\n    await _play_next(chat_id, announce_chat=callback.message.chat)"
+  },
+  "inline_button_stop": {
+    "file": "bot/handlers/music.py",
+    "code": "@bot.on_callback_query(filters.regex(\"^ctl_stop$\"))\nasync def ctl_stop(client: Client, callback: CallbackQuery):\n    chat_id = callback.message.chat.id\n    queue_manager.clear(chat_id)\n    try:\n        await calls.leave_call(chat_id)\n    except Exception:\n        pass\n    await callback.answer(\"Stopped\")\n    await callback.message.edit_text(\"⏹ Stopped and cleared the queue.\")"
+  },
+  "inline_button_show_help": {
+    "file": "bot/handlers/general.py",
+    "code": "@bot.on_callback_query(filters.regex(\"^show_help$\"))\nasync def show_help_cb(client: Client, callback: CallbackQuery):\n    await callback.answer()\n    await callback.message.edit_text(_help_text())"
+  },
+  "auto_advance_on_track_end": {
+    "file": "bot/handlers/music.py",
+    "note": "Not a user command \u2014 fires automatically when a track finishes, to play the next queued track",
+    "code": "@calls.on_update()\nasync def on_stream_end(client: PyTgCalls, update: Update):\n    if update.__class__.__name__ == \"StreamEnded\":\n        chat = await bot.get_chat(update.chat_id)\n        await _play_next(update.chat_id, announce_chat=chat)"
+  }
+}

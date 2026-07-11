@@ -1,0 +1,80 @@
+{
+  "bot_commands": [
+    {
+      "command": "start",
+      "scope": "private",
+      "description": "Show welcome message with buttons to add the bot to a group"
+    },
+    {
+      "command": "help",
+      "scope": "private_and_group",
+      "description": "List all available commands"
+    },
+    {
+      "command": "play",
+      "scope": "group",
+      "usage": "/play <song name or YouTube URL>",
+      "description": "Play a track now, or queue it if something is already playing",
+      "private_chat_behavior": "Replies that music only works in group voice chats"
+    },
+    {
+      "command": "pause",
+      "scope": "group",
+      "description": "Pause the current playback"
+    },
+    {
+      "command": "resume",
+      "scope": "group",
+      "description": "Resume paused playback"
+    },
+    {
+      "command": "skip",
+      "scope": "group",
+      "description": "Skip to the next track in the queue"
+    },
+    {
+      "command": "stop",
+      "scope": "group",
+      "description": "Stop playback and clear the queue"
+    },
+    {
+      "command": "queue",
+      "scope": "group",
+      "description": "Show the currently playing track and upcoming queue"
+    }
+  ],
+  "inline_buttons": [
+    {
+      "callback_data": "ctl_pause_resume",
+      "label": "\u23f8 Pause / \u25b6\ufe0f Resume",
+      "attached_to": "Now playing message",
+      "action": "Toggles pause/resume, same as /pause and /resume"
+    },
+    {
+      "callback_data": "ctl_skip",
+      "label": "\u23ed Skip",
+      "attached_to": "Now playing message",
+      "action": "Same as /skip"
+    },
+    {
+      "callback_data": "ctl_stop",
+      "label": "\u23f9 Stop",
+      "attached_to": "Now playing message",
+      "action": "Same as /stop"
+    },
+    {
+      "callback_data": "show_help",
+      "label": "\ud83d\udcd6 Commands",
+      "attached_to": "/start message (private chat)",
+      "action": "Edits the message to show the help text"
+    }
+  ],
+  "env_vars": {
+    "API_ID": "From my.telegram.org",
+    "API_HASH": "From my.telegram.org",
+    "BOT_TOKEN": "From @BotFather",
+    "SESSION_STRING": "Generated via generate_session.py (the assistant user account)",
+    "ADMIN_IDS": "Optional, comma-separated Telegram user IDs",
+    "LOG_CHAT_ID": "Optional"
+  }
+}
